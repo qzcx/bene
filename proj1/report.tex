@@ -27,13 +27,19 @@
 
 \author{Jonathan George}
 
-\date{}
+\date{January 27th, 2015}
 
 \maketitle
 
+This report covers the findings from simulating a network using a packet-level, event-driven simulator. Using the simulator, some basic networks were setup and used to verify delay and loss statitics. As well, basic queueing theory was examined, showing how queueing delay can grow exponentially as utilization approaches 100\%. 
+
+The code for this project can be found at https://github.com/qzcx/bene
+
 \section{Two Nodes - Part 1}
 
+\includegraphics{TwoNodes.png}
 
+In this first section, a simple two node network was simulated. The bandwidth of the links was set to 1 Mbps with a propagation delay of 1 second. A single packet of 1000 bytes was sent at time 0.
 
 \begin{lstlisting}
 class DelayHandler(object):
@@ -88,23 +94,16 @@ def twoNodes_1():
     run()
 \end{lstlisting}
 
-Output
-1MBPS bandwidth - Dprop 1 sec - one 1000 byte packet
-time    ident   created sent_at Dtrans  Dprop   Dqueue  
-1.008   1       0       1.008   0.008   1       0
+The output from this program was:
+
+\includegraphics{twoNode-1.png}
+
+From this output we can see that the propegation time was 1 second and the transmission time was 8 milliseconds. This matches what we should expect since a bandwidth of 1 Mbps would take 1 microsecond per bit. Therefore to process the 1000 byte (or 8000 bit) package, we should expect it to take 8 milliseconds.
+
 
 \section{Two Nodes - Part 2}
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse
-posuere tellus scelerisque ante luctus eget dapibus ante
-egestas. Pellentesque habitant morbi tristique senectus et netus et
-malesuada fames ac turpis egestas. Curabitur eget lacus massa, eget
-venenatis nisi. Mauris auctor posuere dignissim. Aenean nec tortor
-ante, in venenatis arcu. Sed velit turpis, hendrerit ut feugiat
-viverra, ultricies tempus nulla. Pellentesque molestie leo ac mi
-aliquet sit amet faucibus enim interdum. Phasellus quis sapien
-odio. Suspendisse tempor malesuada quam, eget elementum elit placerat
-nec. Ut id laoreet risus.
+For this section we descreased the bandwidth to 100 bps and a propegation delay of 10 ms. 
 
 \begin{lstlisting}
 """
@@ -128,23 +127,15 @@ def twoNodes_2():
 
 
 \end{lstlisting}
-Output:
-100bps bandwidth - Dprop 10 ms - one 1000 byte packet
-time    ident   created sent_at Dtrans  Dprop   Dqueue  
-80.01   1       0       80.01   80.0    0.01    0
+The output from this program was
+
+\includegraphics{twoNode-2.png}
+
+We can see here that the transmission delay inceased to 80 seconds. By decreasing the bandwidth by a factor of 10000, our transmission delay increased by the same factor. 
 
 \section{Two Nodes - Part 3}
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse
-posuere tellus scelerisque ante luctus eget dapibus ante
-egestas. Pellentesque habitant morbi tristique senectus et netus et
-malesuada fames ac turpis egestas. Curabitur eget lacus massa, eget
-venenatis nisi. Mauris auctor posuere dignissim. Aenean nec tortor
-ante, in venenatis arcu. Sed velit turpis, hendrerit ut feugiat
-viverra, ultricies tempus nulla. Pellentesque molestie leo ac mi
-aliquet sit amet faucibus enim interdum. Phasellus quis sapien
-odio. Suspendisse tempor malesuada quam, eget elementum elit placerat
-nec. Ut id laoreet risus.
+In this section, we will show the effects of queuing delay on a two node system. We will set the bandwidth of the links to 1 Mbps, with a propagation delay of 10 ms. Then we will send 3 packets together at time 0 seconds. Then after those packets are passed through the system, we will send a fourth packet to show the typical isolated case.
 
 \begin{lstlisting}
 """
@@ -178,18 +169,23 @@ def twoNodes_3():
 
     run()
 \end{lstlisting}
-Output:
-1Mbps bandwidth - Dprop 10 ms - three 1000 byte packet, one more at t=2
-time    ident   created sent_at Dtrans  Dprop   Dqueue  
-0.018   1       0       0.018   0.008   0.01    0
-0.026   1       0       0.026   0.008   0.01    0.008
-0.034   1       0       0.034   0.008   0.01    0.016
-2.018   1       2.0     0.018   0.008   0.01    0.0
+The output of the progam:
 
+\includegraphics[width=11cm]{twoNode-3.png}
+
+We can see that like the first setup, the transmission delay was 8 milliseconds. However, in this case the second and third packet had to wait for the packets which were in front of them. This caused a queuing delay of 8 milliseconds and 16 milliseconds respectively. This also shows the pipeline nature of network links. The queuing delay was only dependent on the propegation delay and not the transmission delay. 
+
+Also as expected the packet sent 2 seconds after the first 3 had 0 queuing theory delay and a total time equal to the first packet.
 
 \section{Three Nodes - Two Fast Links}
 
-Description of the two fast links setup. 
+
+
+In this next section we will show the relationship between multiple links. We will set up three nodes and vary the bandwidths of the second link in the node.
+
+In the first simulation we will use two nodes which have the same bandwidth of 1 Mbps and send 1000 packets of size 1000 Bytes. We will also compare this to the situation where we have 1 Gbps links.
+
+\includegraphics{ThreeFast.png}
 
 \begin{lstlisting}
 def threeNodeSetup():
@@ -272,28 +268,26 @@ def fasterLinks():
 
     Sim.scheduler.run()
 \end{lstlisting}
-Fast Links
-End Time: 8.208
-Queueing delay: 7.992
+For the 1 Mbps links we get the output: 
 
-Faster Links
-End Time: 0.208008
-Queueing delay: 0.007992
+\includegraphics{3fast.png}
 
-Anaysis of the results
+We can see from these results that this matches our anaylsis of the two node setup with the exception that there is an extra 0.1 milliseconds due to the extra length the packet must travel. By sending 1000 packets, it increased the transmission delay by a factor of 1000. However, similar to the third two node situation only the transmission delay causes queuing delay. We can see from this example, that the transmission delay dominates the propagation delay.
+
+For the 1 Gbps links we get the output:
+
+\includegraphics{3faster.png}
+
+We can see that both the transmission delay and the queuing delay decreased by a factor of 1000. This is as expected.
+
 
 \section{Three Nodes - One Slow link}
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse
-posuere tellus scelerisque ante luctus eget dapibus ante
-egestas. Pellentesque habitant morbi tristique senectus et netus et
-malesuada fames ac turpis egestas. Curabitur eget lacus massa, eget
-venenatis nisi. Mauris auctor posuere dignissim. Aenean nec tortor
-ante, in venenatis arcu. Sed velit turpis, hendrerit ut feugiat
-viverra, ultricies tempus nulla. Pellentesque molestie leo ac mi
-aliquet sit amet faucibus enim interdum. Phasellus quis sapien
-odio. Suspendisse tempor malesuada quam, eget elementum elit placerat
-nec. Ut id laoreet risus.
+
+
+In this last situation, we will decrease the second link's bandwidth to 256 kbps. This will cause queuing delay in the the second node because it's arrival rate will be greater than it's departure rate.
+
+\includegraphics{ThreeSlow.png}
 
 \begin{lstlisting}
 """
@@ -321,21 +315,135 @@ def slowLink():
         Sim.scheduler.add(delay=0, event=p, handler=n1.send_packet)
     Sim.scheduler.run()
 \end{lstlisting}
-Fast/Slow Links
-End Time: 31.458
-Queueing delay: 31.21875
+
+Our results were:
+
+\includegraphics{3slow.png}
+
+We can see that our expectations were met and the delay increased by a factor of 4. 
+The total propagation delay should be 200 ms. The first link contributes 8 ms of transmision delay and then the second link takes 8000/256Kbps per packet. This totals to 31.458 seconds which matches our simulator output
 
 \section{Queueing Theory}
 
-Donec luctus, libero et egestas tincidunt, arcu ante commodo nunc,
-quis sodales leo risus non libero. Mauris ac blandit ligula. Praesent
-in dolor non nibh congue blandit. Curabitur in sodales
-neque. Curabitur tincidunt nisl nec mauris bibendum
-molestie. Suspendisse non justo erat. Ut quis odio elit, sit amet
-ullamcorper dui. Nam massa urna, tempus non hendrerit porttitor,
-feugiat quis quam. Quisque lacinia cursus nulla, id placerat enim
-accumsan et. Donec porta pharetra tincidunt.
+In this final section we will simulate basic queuing theory, showing that as utility approaches 100\%, the queueing delay approaches infinite. 
 
-\includegraphics[width=11cm]{equation.png}
+The code below is based off of delay.py written by Dr. Zapalla
+\begin{lstlisting}
+import sys
+sys.path.append('..')
+
+from src.sim import Sim
+from src import node
+from src import link
+from src import packet
+
+from networks.network import Network
+
+import random as random1
+
+import optparse
+
+import matplotlib
+matplotlib.use('Agg')
+from pylab import *
+
+class Generator(object):
+    def __init__(self,node,destination,load,duration):
+        self.node = node
+        self.load = load
+        self.duration = duration
+        self.start = 0
+        self.ident = 1
+        self.destination = destination
+
+    def handle(self,event):
+        # quit if done
+        now = Sim.scheduler.current_time()
+        if (now - self.start) > self.duration:
+            return
+
+        # generate a packet
+        self.ident += 1
+        p = packet.Packet(destination_address=self.destination,ident=self.ident,protocol='delay',length=1000)
+        Sim.scheduler.add(delay=0, event=p, handler=self.node.send_packet)
+        # schedule the next time we should generate a packet
+        Sim.scheduler.add(delay=random1.expovariate(self.load), event='generate', handler=self.handle)
+
+
+
+
+class DelayHandler(object):
+    def receive_packet(self,packet):
+        global count
+        global tot_delay
+        tot_delay += packet.queueing_delay
+        count += 1
+
+def calc_avg_delay(loadFactor):
+    # parameters
+    Sim.scheduler.reset()
+
+    # setup network
+    net = Network('../networks/one-hop.txt')
+
+    # setup routes
+    n1 = net.get_node('n1')
+    n2 = net.get_node('n2')
+    n1.add_forwarding_entry(address=n2.get_address('n1'),link=n1.links[0])
+    n2.add_forwarding_entry(address=n1.get_address('n2'),link=n2.links[0])
+
+    # setup app
+    d = DelayHandler()
+    net.nodes['n2'].add_protocol(protocol="delay",handler=d)
+
+    # setup packet generator
+    destination = n2.get_address('n1')
+    max_rate = 1000000/(1000*8)
+    load = loadFactor*max_rate
+    g = Generator(node=n1,destination=destination,load=load,duration=10)
+    Sim.scheduler.add(delay=0, event='generate', handler=g.handle)
+    
+    # run the simulation
+    Sim.scheduler.run()
+    print "average =", tot_delay/count,"count =",count
+
+    return tot_delay/count
+
+def plot_results(trials,results):
+    """ Create a line graph of an equation. """
+    clf()
+
+    plot(trials,results)
+
+    
+    x = np.arange(0,1,0.01)
+    u = 1000000.0/(1000.0*8.0)
+    plot(x,(1/(2*u))*x/(1-x),label='Theory',color="green")
+
+    xlabel('utilization')
+    ylabel('1/(2u) x p/(1-p)')
+    savefig('equation.png')
+
+
+if __name__ == '__main__':
+    trials = [.10,.20,.30,.40,.50,.60,.70,.80,.90,.95,.97,.98,]
+    results = []
+    global count
+    global tot_delay
+    tot_delay = 0
+    count = 0
+    for load in trials:
+        results.append(calc_avg_delay(load))
+        count = 0
+        tot_delay = 0
+    plot_results(trials,results)
+\end{lstlisting}
+The code above uses a two node simulator and a random generator to supply a certain load to the simulator. By simulating, different loads we can see how system's queuing delay changes based on utilization. 
+
+The theoretical curve of 1/(2*mu)*rho/(1-rho) is used as a comparison. 
+
+Our final result shown below, shows that our simulator matches the expected equation. Although we did notice that the results of the generator did vary. It would probably be better in the future to do many trials and average those results to see a more smooth curve. Overall for this experiement these results are satisifactory because we can still see the general trend clearly. 
+
+\includegraphics{equation.png}
 
 \end{document}

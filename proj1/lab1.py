@@ -14,7 +14,7 @@ class DelayHandler(object):
 
     def receive_packet(self,packet):
         print Sim.scheduler.current_time(),"\t",packet.ident,"\t",packet.created,"\t",\
-            Sim.scheduler.current_time() - packet.created,packet.transmission_delay,"\t",\
+            Sim.scheduler.current_time() - packet.created,"\t\t",packet.transmission_delay,"\t",\
             packet.propagation_delay,"\t",packet.queueing_delay
 
 class DelayHandler3Node():
@@ -31,7 +31,7 @@ _1MBPS = 1000000
 _1GBPS = _1MBPS * 1000
 
 def run():
-    print "time\t","ident\t","created\t", "sent_at\t", "Dtrans\t", "Dprop\t", "Dqueue\t"
+    print "time\t","ident\t","created\t", "total time\t", "Dtrans\t", "Dprop\t", "Dqueue\t"
     Sim.scheduler.run()
 
 def twoNodeSetUp():

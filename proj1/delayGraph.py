@@ -84,18 +84,18 @@ def plot_results(trials,results):
 
     plot(trials,results)
 
-    # x = np.arange(0,9.9,0.1)
-    # L = 
-    # u = 
-    # p = 
-    # plot(x,1/(2u) * p/(1-p))
-    xlabel('w')
+    
+    x = np.arange(0,1,0.01)
+    u = 1000000.0/(1000.0*8.0)
+    plot(x,(1/(2*u))*x/(1-x),label='Theory',color="green")
+
+    xlabel('utilization')
     ylabel('1/(2u) x p/(1-p)')
     savefig('equation.png')
 
 
 if __name__ == '__main__':
-    trials = [.10,.20,.30,.40,.50,.60,.70,.80,.90,.95,.97,.98,.99,.9999,.99999]
+    trials = [.10,.20,.30,.40,.50,.60,.70,.80,.90,.95,.97,.98,]
     results = []
     global count
     global tot_delay

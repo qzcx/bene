@@ -55,7 +55,7 @@ if __name__ == '__main__':
     # setup packet generator
     destination = n2.get_address('n1')
     max_rate = 1000000/(1000*8)
-    load = 0.8*max_rate
+    load = 0.99*max_rate
     g = Generator(node=n1,destination=destination,load=load,duration=10)
     Sim.scheduler.add(delay=0, event='generate', handler=g.handle)
     

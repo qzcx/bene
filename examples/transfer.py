@@ -21,7 +21,7 @@ class AppHandler(object):
             os.makedirs(self.directory)
         self.f = open("%s/%s" % (self.directory,self.filename),'w')
 
-    def receive_data(self,data):
+    def receive_data(self,data, packet):
         Sim.trace('AppHandler',"application got %d bytes" % (len(data)))
         self.f.write(data)
         self.f.flush()
@@ -48,11 +48,15 @@ class Main(object):
         parser.add_option("-w","--window",type="int",dest="window",
                           default=3000,
                           help="size of the window")
+        parser.add_option("-d", "--dynamic",
+                  action="store_true", dest="dynamic", default=False,
+                  help="turn on dynamic timer")
 
         (options,args) = parser.parse_args()
         self.filename = options.filename
         self.loss = options.loss
         self.window = options.window
+        self.dyn_timer = options.dynamic
 
     def diff(self):
         args = ['diff','-u',self.filename,self.directory+'/'+self.filename]
@@ -89,8 +93,8 @@ class Main(object):
         a = AppHandler(self.filename)
 
         # setup connection
-        c1 = TCP(t1,n1.get_address('n2'),1,n2.get_address('n1'),1,a,window=self.window)
-        c2 = TCP(t2,n2.get_address('n1'),1,n1.get_address('n2'),1,a,window=self.window)
+        c1 = TCP(t1,n1.get_address('n2'),1,n2.get_address('n1'),1,a,window=self.window,dyn_timer=self.dyn_timer)
+        c2 = TCP(t2,n2.get_address('n1'),1,n1.get_address('n2'),1,a,window=self.window,dyn_timer=self.dyn_timer)
 
         # send a file
         with open(self.filename,'r') as f:

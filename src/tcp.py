@@ -9,9 +9,11 @@ from src.buffer import SendBuffer,ReceiveBuffer
 class TCP(Connection):
     ''' A TCP connection between two hosts.'''
     def __init__(self,transport,source_address,source_port,
-                 destination_address,destination_port,app=None,window=1000):
+                 destination_address,destination_port,app=None,window=1000,dyn_timer=False):
         Connection.__init__(self,transport,source_address,source_port,
                             destination_address,destination_port,app)
+
+        self.dyn_timer = dyn_timer
 
         ### Sender functionality
 
@@ -35,6 +37,8 @@ class TCP(Connection):
         #tracks packet sent times 
         self.sent_time = {}
         self.alpha = 0.125
+        #keep track of timeout history
+        self.timeout_hist = []
 
         ### Receiver functionality
 
@@ -118,6 +122,8 @@ class TCP(Connection):
         if self.timeout < self.timeout_min:
             self.timeout = self.timeout_min
 
+        self.timeout_hist.append(self.timeout)
+
         self.send_availible()
         if self.send_buffer.outstanding() <= 0: #not waiting on anything.
             self.cancel_timer() 
@@ -136,6 +142,9 @@ class TCP(Connection):
         self.timeout = self.timeout*2
         if self.timeout > self.timeout_max:
             self.timeout = self.timeout_max
+        
+        self.timeout_hist.append(self.timeout)
+        
         data,sequence = self.send_buffer.resend(self.mss)
         self.send_packet(data, sequence)
 
@@ -143,6 +152,8 @@ class TCP(Connection):
     def set_timer(self):
         '''sets or resets the timer'''
         self.cancel_timer()
+        if not self.dyn_timer:
+            self.timeout = 1
         self.timer = Sim.scheduler.add(delay=self.timeout, event='retransmit', handler=self.retransmit)
 
     def cancel_timer(self):
@@ -167,7 +178,7 @@ class TCP(Connection):
         data,start = self.receive_buffer.get()
         #set the ack to the next sequence needed.
         ack = start + len(data)
-        self.app.receive_data(data)
+        self.app.receive_data(data,packet)
         self.send_ack(ack,packet.sequence)
 
     def send_ack(self, ack, sequence):

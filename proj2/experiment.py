@@ -17,13 +17,6 @@ import matplotlib
 matplotlib.use('Agg')
 from pylab import *
 
-class DelayHandler(object):
-    def receive_packet(self,packet):
-        global count
-        global tot_delay
-        tot_delay += packet.queueing_delay
-        count += 1
-
 class AppHandler(object):
     def __init__(self,filename):
         self.filename = filename
@@ -32,10 +25,14 @@ class AppHandler(object):
             os.makedirs(self.directory)
         self.f = open("%s/%s" % (self.directory,self.filename),'w')
 
-    def receive_data(self,data):
+    def receive_data(self,data,packet):
         #Sim.trace('AppHandler',"application got %d bytes" % (len(data)))
         self.f.write(data)
         self.f.flush()
+        global count
+        global tot_delay
+        tot_delay += packet.queueing_delay
+        count += 1
 
 class Main(object):
     def __init__(self):
@@ -46,6 +43,7 @@ class Main(object):
         self.parse_options()
         self.get_data()
         self.graphData()
+        #self.graph_timeout()
 
     def parse_options(self):
         parser = optparse.OptionParser(usage = "%prog [options]",
@@ -64,7 +62,7 @@ class Main(object):
         tot_delay = 0
         count = 0
         for window in self.window_sizes:
-            size = self.run(loss=0, window=1000)
+            size,timeout_hist = self.run(loss=0, window=window)
             print "size",size
             print "time", Sim.scheduler.current_time()
             self.throughput.append(float(size)/Sim.scheduler.current_time())
@@ -81,12 +79,20 @@ class Main(object):
         xlabel('window_size')
         ylabel('throughput')
         savefig('throughput.png')
-        """
+        
         clf()
         plot(self.window_sizes,self.delay)
         xlabel('window_size')
         ylabel('queueing_delay')
-        savefig('queueing_delay.png')"""
+        savefig('queueing_delay.png')
+
+    def graph_timeout(self):
+        size,timeout_hist = self.run(loss=0.1, window=10000)
+        clf()
+        plot(timeout_hist)
+        xlabel('packet #')
+        ylabel('timeout')
+        savefig('timeout.png')
 
     def run(self, loss, window):
         # parameters
@@ -111,13 +117,9 @@ class Main(object):
         # setup application
         a = AppHandler(self.filename)
 
-        # setup app
-        d = DelayHandler()
-        net.nodes['n2'].add_protocol(protocol="delay",handler=d)
-
         # setup connection
-        c1 = TCP(t1,n1.get_address('n2'),1,n2.get_address('n1'),1,a,window=window)
-        c2 = TCP(t2,n2.get_address('n1'),1,n1.get_address('n2'),1,a,window=window)
+        c1 = TCP(t1,n1.get_address('n2'),1,n2.get_address('n1'),1,a,window=window,dyn_timer=True)
+        c2 = TCP(t2,n2.get_address('n1'),1,n1.get_address('n2'),1,a,window=window,dyn_timer=True)
 
         size = 0
         # send a file
@@ -131,7 +133,7 @@ class Main(object):
 
         # run the simulation
         Sim.scheduler.run()
-        return size
+        return size,c1.timeout_hist
 
 if __name__ == '__main__':
 

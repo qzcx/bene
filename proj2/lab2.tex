@@ -40,81 +40,68 @@ When the sender receives an ack for a message it will tell the buffer to slide t
 The resend timer is reset everytime a packet is sent from the reciever side. It plays the role of a watchdog timer, watching for a dropped packet or too slow of a connection. When it expires, it will resend the lowest unacknowledged packet and wait again for a returning ack. When this ack arrives the sender will send all data availible based on that ack.
 
 \includegraphics[width=11cm]{fast_transport.png}
+
 Credit for image is given to Dr. Zappala's class slides.
 
-\begin{lstlisting}
-class Node:
-    def __init__(self,scheduler):
-        self.scheduler = scheduler
+\section{Tests}
+In this section, we will describe the tests we used to test our TCP implementation. These tests were checked by using transfer.py which was provided by Dr. Zappala. This test script accepts a window size, file and loss rate in order to test different scenerios. Each test was using a two node scenerio found in networks/one-hop.txt.
 
-    def handle_message(self,t,message):
-        print "Received at",t,':',message.body
-        if message.times < 3:
-            self.scheduler.add(t+1.5, message, self.handle_message)
-        message.times += 1
-\end{lstlisting}
 
-\section{Section Name}
 
-Mauris dictum augue a eros adipiscing mollis. Duis tempus, risus sed
-iaculis vehicula, mauris mi aliquam odio, aliquet congue ligula tortor
-vitae leo. In convallis, lectus sed egestas tincidunt, augue massa
-lacinia augue, a ornare dui magna id enim. Fusce porttitor scelerisque
-lorem nec eleifend. Cras lobortis eleifend orci, non lacinia felis
-tincidunt eget. Nam vulputate tellus magna, at scelerisque
-ligula. Duis dictum bibendum odio nec lobortis. Ut dignissim fringilla
-euismod. In pharetra augue et odio blandit malesuada. Nulla lacus
-nisi, auctor eget aliquet a, auctor at lorem. Suspendisse nec laoreet
-sapien. Nulla facilisi. Nam a congue nunc. Pellentesque auctor turpis
-ac augue aliquam convallis. Aenean sit amet eros nibh. Morbi a egestas
-libero.
-
-\vspace{0.5cm}
-\begin{tabular}{lc}
-  \toprule
-  Setting & Result\\
-  \midrule
-  1 & 1.0\\
-  2 & 3.45\\
-  3 & 7.85\\
-  4 & 15.89\\
-  \bottomrule
-\end{tabular}
-\vspace{0.5cm}
-
-Nam sed lacus sit amet nisl bibendum rutrum vel id nisl. Etiam sit
-amet ipsum vulputate tellus fringilla tristique a et augue. Etiam
-suscipit ante id est lobortis hendrerit. Vivamus vel nisl sit amet
-metus volutpat faucibus. Praesent nunc urna, luctus vel convallis
-eget, luctus et odio. Nunc et nisl felis. Fusce quis libero sit amet
-libero cursus pretium. Vivamus dictum risus non tellus commodo non
-bibendum tortor convallis. Cras tempor orci eu leo auctor sed euismod
-arcu consectetur. In scelerisque felis et erat commodo
-bibendum. Pellentesque hendrerit enim vitae neque sollicitudin
-bibendum. In ligula lorem, blandit sit amet aliquet eget, accumsan ut
-sem. Maecenas in velit justo. Morbi tellus sem, ultricies in tristique
-non, aliquam a lacus. Sed rhoncus blandit ligula, ut eleifend magna
-lacinia quis.
-
+Test Cases:
 \begin{enumerate}
+\item Bandwidth of 10Mbps, propegation delay of 10ms and window size of 3000 bytes. Transferring test.txt.
+\begin{enumerate}
+\item loss rate of 0\%. Took 0.0732 seconds
+\item loss rate of 10\%. Took 1.0732 seconds
+\item loss rate of 20\%. Took 3.0948 seconds
+\item loss rate of 50\%. Took 14.0732 seconds
+\end{enumerate}
 
-\item Item.
-
-\item Another item.
+\item Bandwidth of 10Mbps, propegation delay of 10ms and window size of 3000 bytes. Transferring internet-architecture.pdf.
+\begin{enumerate}
+\item loss rate of 0\%. Took 1.07 seconds
+\item loss rate of 10\%. Took 32 seconds
+\item loss rate of 20\%. Took 64 seconds
+\item loss rate of 50\%. Took 359 seconds
+\end{enumerate}
 
 \end{enumerate}
 
-\section{Section name}
+The total time the test takes in each of these cases depends on the random element of packet loss, but it is clear the the one second timeout is insuficent, since it means there is time spent waiting for the timer to expire when no packets are on the network. This leads us to implementing a dynamic timer.
 
-Donec luctus, libero et egestas tincidunt, arcu ante commodo nunc,
-quis sodales leo risus non libero. Mauris ac blandit ligula. Praesent
-in dolor non nibh congue blandit. Curabitur in sodales
-neque. Curabitur tincidunt nisl nec mauris bibendum
-molestie. Suspendisse non justo erat. Ut quis odio elit, sit amet
-ullamcorper dui. Nam massa urna, tempus non hendrerit porttitor,
-feugiat quis quam. Quisque lacinia cursus nulla, id placerat enim
-accumsan et. Donec porta pharetra tincidunt.
+\section{Dynamic Retransmission Timer}
 
-\includegraphics[width=11cm]{graphs/download-combined}
+The Dynamic timer is implemented by estimating RTT (Round Trip Time) and using an exponential backoff function to slowly approach the proper value. Packet loss indicates the RTT estimate is too low. Therefore when the transmission timer expires, it doubles the RTT in order to compensate for this. 
+Each time an ack is recieved the timer value is updated by the following equation:
+
+NewEstimatedRTT = (1 − alpha) ∗ OldEstimatedRTT + alpha ∗ SampleRTT 
+
+In our implementation we chose alpha to equal 1/8. 
+
+\includegraphics[width=11cm]{timeout.png}
+
+This graph shows the exponential backoff of the timeout value when packets are reliable and the doubling of the timeout value when a packet is lost. 
+
+\section{Experiments}
+In this section, we explore the effects of window size on the throughput and queuing delay when there is a loss rate of 0\%
+
+We set up a two node network setup with a bandwidth of 10 Mbps, a propagation delay of 10 ms, a queue size of 100 and a loss rate of 0\%. We transferred the internet-architecture.pdf file using window sizes of 1000, 2000, 5000, 10000, 15000, and 20000 bytes. We then computed the throughput of the transfer as the total bits sent divided by the total time to send the file and the average queueing delay of all segments sent. 
+
+
+
+Throughput vs Window Size:
+
+\includegraphics[width=11cm]{throughput.png}
+
+Queueing Delay vs Window Size:
+
+\includegraphics[width=11cm]{queueing_delay.png}
+
+As can be seen by the graph, the throughput increases linearly as you increase the window size. However, the queuing delay increases exponentially. This will require us to implement conguestion control in the next lab. 
+
+\section{Source Code}
+
+Source code for this report can be found at https://github.com/qzcx/bene
 
 \end{document}

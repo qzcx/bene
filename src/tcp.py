@@ -9,21 +9,33 @@ from src.buffer import SendBuffer,ReceiveBuffer
 class TCP(Connection):
     ''' A TCP connection between two hosts.'''
     def __init__(self,transport,source_address,source_port,
-                 destination_address,destination_port,app=None,window=1000,dyn_timer=False):
+                 destination_address,destination_port,app=None,window=1000,
+                 dyn_timer=False, threshold=100000, lossPackets=[]):
         Connection.__init__(self,transport,source_address,source_port,
                             destination_address,destination_port,app)
 
         self.dyn_timer = dyn_timer
 
         ### Sender functionality
-
-        # send window; represents the total number of bytes that may
-        # be outstanding at one time
-        self.window = window
-        # send buffer
-        self.send_buffer = SendBuffer()
         # maximum segment size, in bytes
         self.mss = 1000
+        #default threshold window size for conguestion control is 100000
+        self.threshold = threshold
+        # send window; represents the total number of bytes that may
+        # be outstanding at one time
+        self.window = self.mss
+        #ackCount is used to track Acks in Additive increase
+        self.ackCount = 0
+        #lastAck keeps track of the last ack to be recieved.
+        self.lastAck = -1
+        #dupAckCount keeps track of the number of times a duplicate ack is recieved
+        self.dupAckCount = 0
+        #lossPackets is a array of packet indexes, telling the process which one to drop.
+        self.lossPackets = lossPackets
+
+        # send buffer
+        self.send_buffer = SendBuffer() 
+        
         # largest sequence number that has been ACKed so far; represents
         # the next sequence number the client expects to receive
         self.sequence = 0
@@ -38,7 +50,18 @@ class TCP(Connection):
         self.sent_time = {}
         self.alpha = 0.125
         #keep track of timeout history
+        #this is used for lab 2
         self.timeout_hist = []
+        #keep track of sent/lost/ack times and sequence nums
+        #used for lab 3 graphs
+        self.sentTime = []
+        self.sentSeq = []
+        self.queueTime = []
+        self.queueSeq = []
+        self.lostTime = []
+        self.lostSeq = []
+        self.ackTime = []
+        self.ackSeq = []
 
         ### Receiver functionality
 
@@ -79,28 +102,35 @@ class TCP(Connection):
         while self.send_buffer.available() > 0 and self.send_buffer.outstanding() < self.window:
             #send up to the window limit
             size = self.window - self.send_buffer.outstanding()
+            #print "window,out",self.window,self.send_buffer.outstanding()
             if size > self.mss:
                 size = self.mss
             data,sequence = self.send_buffer.get(size)
+            #print "size,seq",size,sequence
             self.send_packet(data,sequence)
 
 
     def send_packet(self,data,sequence):
-        packet = TCPPacket(source_address=self.source_address,
-                           source_port=self.source_port,
-                           destination_address=self.destination_address,
-                           destination_port=self.destination_port,
-                           body=data,
-                           sequence=sequence,ack_number=0)
-
-        # send the packet
-        self.trace("%s (%d) sending TCP segment to %d for %d" % \
-            (self.node.hostname,self.source_address,self.destination_address,packet.sequence))
-        self.trace("%s timeout %f" % \
-            (self.node.hostname,self.timeout))
-        self.sent_time[packet.sequence] = Sim.scheduler.current_time()
-        
-        self.transport.send_packet(packet)
+        if sequence in self.lossPackets:
+            self.lossPackets.remove(sequence)
+            self.lostTime.append(Sim.scheduler.current_time())
+            self.lostSeq.append(sequence)
+        else:
+            self.sentTime.append(Sim.scheduler.current_time())
+            self.sentSeq.append(sequence)
+            packet = TCPPacket(source_address=self.source_address,
+                               source_port=self.source_port,
+                               destination_address=self.destination_address,
+                               destination_port=self.destination_port,
+                               body=data,
+                               sequence=sequence,ack_number=0)
+            # send the packet
+            self.trace("%s (%d) sending TCP segment to %d for %d" % \
+                (self.node.hostname,self.source_address,self.destination_address,packet.sequence))
+            self.trace("%s timeout %f" % \
+                (self.node.hostname,self.timeout))
+            self.sent_time[packet.sequence] = Sim.scheduler.current_time()
+            self.transport.send_packet(packet)
         #set the timer
         self.set_timer()
         
@@ -118,17 +148,51 @@ class TCP(Connection):
         #measure RTO
         rto = Sim.scheduler.current_time() - self.sent_time[packet.sequence]
 
+        #save the time and sequence for lab 3
+        self.ackTime.append(Sim.scheduler.current_time())
+        self.ackSeq.append(packet.ack_number)
+
+        if self.lastAck == packet.ack_number and packet.ack_number < packet.sequence:
+            self.dupAckCount +=1
+            if self.dupAckCount == 3:
+                print "Three dup acks ", self.lastAck
+                self.cancel_timer();
+                self.retransmit(None);
+        else:
+            self.lastAck = packet.ack_number
+            self.adjustWindow()
+            self.dupAckCount = 0
+
         self.timeout = (1-self.alpha) * self.timeout + self.alpha*rto
         if self.timeout < self.timeout_min:
             self.timeout = self.timeout_min
 
-        self.timeout_hist.append(self.timeout)
+        #uncomment this line for project 2 graphs.
+        #self.timeout_hist.append(self.timeout)
 
         self.send_availible()
         if self.send_buffer.outstanding() <= 0: #not waiting on anything.
             self.cancel_timer() 
         
-        
+    #handles adjusting the window each time a ACK is recieved
+    def adjustWindow(self):
+        #adjust window size
+        if self.window >= self.threshold:
+            if self.ackCount >= float(self.window)/self.mss:
+                self.window += self.mss
+                self.threshold += self.mss
+                self.ackCount = 0
+            else:
+                self.ackCount += 1
+        else:
+            self.window += self.mss
+
+    def lossEvent(self):
+        #self.dupAckCount = 0 #not sure if I need this
+        self.threshold = max(self.window/2,self.mss)
+        #slow start
+        self.window = self.mss
+
 
     def retransmit(self,event):
         ''' 
@@ -137,13 +201,17 @@ class TCP(Connection):
             Only send the first packet in the window.
             Forget other packets
         '''
+        if not event is None:
+            print "Timer Expired"
         self.timer = None
         self.trace("%s (%d) retransmission timer fired" % (self.node.hostname,self.source_address))
         self.timeout = self.timeout*2
         if self.timeout > self.timeout_max:
             self.timeout = self.timeout_max
         
-        self.timeout_hist.append(self.timeout)
+        #uncomment this line for project 2 graphs.
+        #self.timeout_hist.append(self.timeout)
+        self.lossEvent()
         
         data,sequence = self.send_buffer.resend(self.mss)
         self.send_packet(data, sequence)

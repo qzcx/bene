@@ -81,12 +81,12 @@ class Main(object):
         scatter(ackX[:limit],map(modSeq,ackY[:limit]),marker='s',s=0.2)
         xlabel('Time (seconds)')
         ylabel('Sequence Number / 1000 % 50')
-        xlim([0,0.6])
-        ylim([0,50])
+        xlim([-0.05,0.6])
+        ylim([-5,55])
 
         savefig('%s.png' % filename)
 
-    def run(self,threshold=100000, lostPackets=[]):
+    def run(self,threshold=100000, lostPackets=[], reno=False):
         # parameters
         Sim.scheduler.reset()
         Sim.set_debug('AppHandler')
@@ -111,7 +111,7 @@ class Main(object):
 
         # setup connection
         c1 = TCP(t1,n1.get_address('n2'),1,n2.get_address('n1'),1,a,
-                threshold=threshold,dyn_timer=self.dyn_timer, lossPackets=lostPackets)
+                threshold=threshold,dyn_timer=self.dyn_timer, lossPackets=lostPackets, reno=reno)
         c2 = TCP(t2,n2.get_address('n1'),1,n1.get_address('n2'),1,a,
                 threshold=threshold,dyn_timer=self.dyn_timer)
 
@@ -131,21 +131,32 @@ class Main(object):
         
         c1 = self.run()
         self.plot(packetX= c1.sentTime, packetY = c1.sentSeq, ackX=c1.ackTime, ackY=c1.ackSeq, 
-                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "slow_start", limit=200)
+                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "slow_start_new", limit=200)
         c1 = self.run(threshold=16000)
         self.plot(packetX= c1.sentTime, packetY = c1.sentSeq, ackX=c1.ackTime, ackY=c1.ackSeq, 
-                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "additive_increase", limit=200)
+                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "additive_increase_new", limit=200)
         
         c1 = self.run(lostPackets=[31000])
         #print "sentTime",c1.sentTime
         self.plot(packetX= c1.sentTime, packetY = c1.sentSeq, ackX=c1.ackTime, ackY=c1.ackSeq, 
-                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "AIMD", limit=500)
+                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "AIMD_new", limit=500)
         c1 = self.run(lostPackets=[31000,32000,33000])
         self.plot(packetX= c1.sentTime, packetY = c1.sentSeq, ackX=c1.ackTime, ackY=c1.ackSeq, 
-                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "burst_loss", limit=500)
+                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "burst_loss_new", limit=500)
         c1 = self.run(lostPackets=[31000,32000,33000,34000,35000])
         self.plot(packetX= c1.sentTime, packetY = c1.sentSeq, ackX=c1.ackTime, ackY=c1.ackSeq, 
-                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "burst_loss_5", limit=500)
+                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "burst_loss_5_new", limit=500)
+        c1 = self.run(lostPackets=[31000,32000,33000,34000,35000,62000])
+        self.plot(packetX= c1.sentTime, packetY = c1.sentSeq, ackX=c1.ackTime, ackY=c1.ackSeq, 
+                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "burst_loss_5_plus_end_new", limit=500)
+        #Reno Tests
+        c1 = self.run(lostPackets=[31000], reno=True)
+        #print "sentTime",c1.sentTime
+        self.plot(packetX= c1.sentTime, packetY = c1.sentSeq, ackX=c1.ackTime, ackY=c1.ackSeq, 
+                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "AIMD_reno_new", limit=500)
+        c1 = self.run(lostPackets=[31000,32000,33000], reno=True)
+        self.plot(packetX= c1.sentTime, packetY = c1.sentSeq, ackX=c1.ackTime, ackY=c1.ackSeq, 
+                  lostX=c1.lostTime, lostY=c1.lostSeq, filename= "burst_loss_reno_new", limit=500)
 
 
 if __name__ == '__main__':

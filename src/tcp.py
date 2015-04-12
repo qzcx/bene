@@ -10,11 +10,16 @@ class TCP(Connection):
     ''' A TCP connection between two hosts.'''
     def __init__(self,transport,source_address,source_port,
                  destination_address,destination_port,app=None,window=1000,
-                 dyn_timer=False, threshold=100000, lossPackets=[]):
+                 dyn_timer=False, threshold=100000, lossPackets=[], reno=False,
+                 additive_decrease=False, mult_const=0.5, use_fix=True):
         Connection.__init__(self,transport,source_address,source_port,
                             destination_address,destination_port,app)
 
+        self.reno = reno
         self.dyn_timer = dyn_timer
+        self.additive_decrease = additive_decrease
+        self.mult_const = mult_const
+        self.use_fix = use_fix
 
         ### Sender functionality
         # maximum segment size, in bytes
@@ -49,6 +54,11 @@ class TCP(Connection):
         #tracks packet sent times 
         self.sent_time = {}
         self.alpha = 0.125
+
+        #This is a hack to try and fix the multiple dropped packets before
+        self.lastWindowSeq = 0
+        self.lastLossWindowSeq = 0
+
         #keep track of timeout history
         #this is used for lab 2
         self.timeout_hist = []
@@ -56,12 +66,15 @@ class TCP(Connection):
         #used for lab 3 graphs
         self.sentTime = []
         self.sentSeq = []
-        self.queueTime = []
-        self.queueSeq = []
         self.lostTime = []
         self.lostSeq = []
         self.ackTime = []
         self.ackSeq = []
+        #used for lab 4 graphs
+        self.windTime = []
+        self.windSize = []
+
+
 
         ### Receiver functionality
 
@@ -70,6 +83,10 @@ class TCP(Connection):
         # ack number to send; represents the largest in-order sequence
         # number not yet received
         self.ack = 0
+
+        #used for lab 4 graphs
+        self.recvTime = []
+        self.recvSize = []
 
     def trace(self,message):
         ''' Print debugging messages. '''
@@ -99,6 +116,7 @@ class TCP(Connection):
 
     def send_availible(self):
         """sends any availible data without going past the window restriction"""
+        sequence = 0
         while self.send_buffer.available() > 0 and self.send_buffer.outstanding() < self.window:
             #send up to the window limit
             size = self.window - self.send_buffer.outstanding()
@@ -108,7 +126,9 @@ class TCP(Connection):
             data,sequence = self.send_buffer.get(size)
             #print "size,seq",size,sequence
             self.send_packet(data,sequence)
-
+        #if you just filled the window, then save the last packet sequence. 
+        if self.send_buffer.outstanding() >= self.window:
+            self.lastWindowSeq = sequence
 
     def send_packet(self,data,sequence):
         if sequence in self.lossPackets:
@@ -152,12 +172,21 @@ class TCP(Connection):
         self.ackTime.append(Sim.scheduler.current_time())
         self.ackSeq.append(packet.ack_number)
 
-        if self.lastAck == packet.ack_number and packet.ack_number < packet.sequence:
+        #we have gotten farther than the last loss event
+        if self.lastLossWindowSeq + self.mss < packet.ack_number:
+            self.lastLossWindowSeq = 0
+
+        #note the check for lastlossWindowSeq requires that window size is evenly divisable by self.mss
+        if self.lastAck == packet.ack_number:
             self.dupAckCount +=1
-            if self.dupAckCount == 3:
+            if self.dupAckCount == 3 and (self.lastLossWindowSeq + self.mss != packet.ack_number or self.use_fix == False):
+                self.lastLossWindowSeq = self.lastWindowSeq
+                print "windowSeq: ,", self.lastWindowSeq
                 print "Three dup acks ", self.lastAck
                 self.cancel_timer();
                 self.retransmit(None);
+            #ignore any and all duplicate acks, don't look to transmit more data.
+            return
         else:
             self.lastAck = packet.ack_number
             self.adjustWindow()
@@ -186,12 +215,22 @@ class TCP(Connection):
                 self.ackCount += 1
         else:
             self.window += self.mss
+        self.windTime.append(Sim.scheduler.current_time()) 
+        self.windSize.append(self.window)
 
     def lossEvent(self):
         #self.dupAckCount = 0 #not sure if I need this
-        self.threshold = max(self.window/2,self.mss)
+        if self.additive_decrease:
+            self.threshold = max(self.window - self.mss,self.mss)
+        else:
+            self.threshold = max(self.window * self.mult_const,self.mss)
         #slow start
-        self.window = self.mss
+        if self.reno:
+            self.window = max(self.window * self.mult_const,self.mss)
+        else:
+            self.window = self.mss
+        self.windTime.append(Sim.scheduler.current_time()) 
+        self.windSize.append(self.window)
 
 
     def retransmit(self,event):
@@ -246,6 +285,13 @@ class TCP(Connection):
         data,start = self.receive_buffer.get()
         #set the ack to the next sequence needed.
         ack = start + len(data)
+        curTime = Sim.scheduler.current_time()
+        if curTime in self.recvTime:
+            self.recvSize[len(recvSize)] += len(data)*8
+        else:
+            self.recvTime.append(curTime)
+            self.recvSize.append(len(data)*8)
+
         self.app.receive_data(data,packet)
         self.send_ack(ack,packet.sequence)
 

@@ -16,6 +16,12 @@ class Link(object):
         self.busy = False
         self.queue = []
 
+        #used for lab 4 graphs
+        self.queueTime = []
+        self.queueSize = []
+        self.dropTime = []
+        self.dropSize = []
+
     def trace(self,message):
         Sim.trace("Link",message)
 
@@ -26,14 +32,19 @@ class Link(object):
         if not self.running:
             return
         # drop packet due to queue overflow
-        if self.queue_size and len(self.queue) == self.queue_size:
+        if self.queue_size and len(self.queue) >= self.queue_size:
             self.trace("%d dropped packet due to queue overflow" % (self.address))
+            self.dropTime.append(Sim.scheduler.current_time())
+            self.dropSize.append(len(self.queue) + 1)
             return
         # drop packet due to random loss
         if self.loss > 0 and random.random() < self.loss:
             self.trace("%d dropped packet due to random loss" % (self.address))
+            self.dropTime.append(Sim.scheduler.current_time())
+            self.dropSize.append(len(self.queue) + 1)
             return
         packet.enter_queue = Sim.scheduler.current_time()
+
         if len(self.queue) == 0 and not self.busy:
             # packet can be sent immediately
             self.busy = True
@@ -41,6 +52,9 @@ class Link(object):
         else:
             # add packet to queue
             self.queue.append(packet)
+            #log packet enque
+            self.queueTime.append(Sim.scheduler.current_time())
+            self.queueSize.append(len(self.queue))
         
     def transmit(self,packet):
         packet.queueing_delay += Sim.scheduler.current_time() - packet.enter_queue
@@ -56,6 +70,9 @@ class Link(object):
         if len(self.queue) > 0:
             packet = self.queue.pop(0)
             self.transmit(packet)
+            #log packet deque
+            self.queueTime.append(Sim.scheduler.current_time())
+            self.queueSize.append(len(self.queue))
         else:
             self.busy = False
 

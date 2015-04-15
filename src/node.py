@@ -9,6 +9,45 @@ class Node(object):
         self.protocols = {}
         self.forwarding_table = {}
 
+        #added for DV lab
+        self.vector_table = {}
+        self.TTL_links = {}
+
+    def init_vector_table(self):
+        for link in self.links:
+            self.vector_table[link.address] = 0
+
+    def get_vector_table_msg(self):
+        dv_array = [self.hostname]
+        for link_address in self.vector_table.keys():
+            dv_array.extend([(link_address, self.vector_table[link_address])])
+        return dv_array
+
+    def update_vector_table(self, vector_table_msg):
+        hostname = vector_table_msg[0]
+        for tup in vector_table_msg[1:]:
+            dest = tup[0]
+            value = tup[1] + 1
+            
+            if dest in self.vector_table.keys():
+                if value < self.vector_table[dest] :
+                    self.vector_table[dest] = value
+                    self.add_forwarding_entry(dest,self.get_link(hostname))
+                if value <= self.vector_table[dest]:
+                    self.TTL_links[dest] = 3
+            else:
+                self.vector_table[dest] = value
+                self.add_forwarding_entry(dest,self.get_link(hostname))
+                self.TTL_links[dest] = 3
+
+    def decrement_TTL(self):
+        for link in self.TTL_links.keys():
+            self.TTL_links[link] -= 1
+            if self.TTL_links[link] <= 0:
+                self.TTL_links.pop(link,None)
+                self.vector_table.pop(link,None)
+                self.forwarding_table.pop(link,None) 
+
     def trace(self,message):
         Sim.trace("Node",message)
 
@@ -54,6 +93,8 @@ class Node(object):
             return
         del self.forwarding_table[address]
 
+     
+
     ## Handling packets ##
 
     def send_packet(self,packet):
@@ -62,6 +103,7 @@ class Node(object):
         if packet.created == None:
             packet.created = Sim.scheduler.current_time()
 
+        #print packet.body
         # forward the packet
         self.forward_packet(packet)
 
@@ -108,6 +150,7 @@ class Node(object):
             return
         link = self.forwarding_table[packet.destination_address]
         self.trace("%s forwarding packet to %d" % (self.hostname,packet.destination_address))
+        print "%s forwarding packet to %d" % (self.hostname,packet.destination_address)
         link.send_packet(packet)
 
     def forward_broadcast_packet(self,packet):
